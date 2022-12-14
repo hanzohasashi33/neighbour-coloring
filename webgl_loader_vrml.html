@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - loaders - VRML loader</title>
+		<meta charset="utf-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+		/>
+		<link type="text/css" rel="stylesheet" href="main.css" />
+	</head>
+
+	<body>
+		<div id="info">
+			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>
+			- VRML loader
+		</div>
+
+		<!-- Import maps polyfill -->
+		<!-- Remove this when import maps will be widely supported -->
+		<script
+			async
+			src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"
+		></script>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "./jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+			import * as THREE from "three";
+
+			import Stats from "three/addons/libs/stats.module.js";
+
+			import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+			import { VRMLLoader } from "three/addons/loaders/VRMLLoader.js";
+			import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+
+
+			var camera, renderer, stats, controls, loader;
+			var hemiLight, dirLight1, dirLight2, ambLight;
+			var gui;
+
+
+			var firstTime;
+			var currentAppendValue, newAppendValue;
+			var currentShadingValue, newShadingValue;
+			var currentComponentValue, newComponentValue;
+			var currentEdgeValue, newEdgeValue;
+			var currentPaletteValue, newPaletteValue;
+
+
+			var grandScene, assemblyScene, componentScene;
+			var boxDiag;
+
+
+			const guiSettings = {
+				currentComponentOption: "mybox",
+				currentAppendOption: false,
+				currentShadingOption: "phong",
+				currentEdgeOption: "none",
+				currentPaletteOption: "original",
+			};
+
+
+
+			
+			const componentList = [
+				'mybox',
+				'mybox2',
+				'example01',
+				'comps-ecs01',
+				'assm-ecs11',
+				'part003-small',
+				'part003',
+				'part092',
+				'part093',
+				'part094',
+				'part095',
+				'part096',
+				'part097',
+				'part098',
+				'part099',
+				'part100',
+				'part101',
+				'part102',
+				'part103',
+				'part104',
+				'part105',
+				'part106',
+			];
+			
+
+
+
+
+
+			// const componentList = [
+			// 	"mybox",
+			// 	"part003",
+			// 	"part010",
+			// 	"part022",
+			// 	"part031",
+			// 	"part036",
+			// 	"part043",
+			// 	"part049",
+			// 	"part050",
+			// 	"part077",
+			// 	"part092",
+			// 	"part117",
+			// 	"part131",
+			// 	"part188",
+			// ];
+
+
+
+			const shadingList = ["wireframe", "flat", "phong", "none"];
+
+
+
+			const edgeList = [
+				"all-visible",
+				"boundary-visible",
+				"interior-visible",
+				"none",
+			];
+
+
+
+			const paletteList = ["original", "palette-1", "palette-2", "palette-3"];
+
+
+			const palette1 = [
+				86, 201, 82, 86, 82, 201, 201, 82, 86, 240, 111, 105, 150, 200, 90, 240,
+				200, 90, 167, 169, 252, 196, 254, 255, 217, 255, 180, 73, 244, 254, 206,
+				170, 234,
+			];
+
+			const backgroundColor = [128, 0, 0, 255];
+			const bgColorHex = "80--0--0--ff";
+
+			const COMPONENT = "Component";
+
+
+			grandScene = new THREE.Scene();
+			assemblyScene = new THREE.Object3D();
+			componentScene = new THREE.Object3D();
+
+			grandScene.add(assemblyScene);
+
+
+			// background color
+			grandScene.background = new THREE.Color("rgb(128,0,0)");
+
+
+			// light
+			dirLight1 = new THREE.DirectionalLight("rgb(255,255,255)", 0.95);
+			grandScene.add(dirLight1);
+
+			dirLight2 = new THREE.DirectionalLight("rgb(255,255,255)", 0.95);
+			grandScene.add(dirLight2);
+
+			ambLight = new THREE.AmbientLight("rgb(128,128,128)", 1.0);
+			grandScene.add(ambLight);
+
+			
+			firstTime = 1;
+			currentAppendValue = guiSettings.currentAppendOption;
+			currentShadingValue = guiSettings.currentShadingOption;
+			currentComponentValue = guiSettings.currentComponentOption;
+			currentEdgeValue = guiSettings.currentEdgeOption;
+			currentPaletteValue = guiSettings.currentPaletteOption;
+
+			init();
+			animate();
+
+			function init() {
+				camera = new THREE.OrthographicCamera(
+					-window.innerWidth / 2,
+					window.innerWidth / 2,
+					window.innerHeight / 2,
+					-window.innerHeight / 2,
+					0.1,
+					1e10
+				);
+				camera.aspect = window.innerWidth / window.innerHeight;
+
+				loader = new VRMLLoader();
+				loadComponent(currentComponentValue);
+
+				firstTime = 0;
+
+				// renderer
+
+				renderer = new THREE.WebGLRenderer({
+					preserveDrawingBuffer: true,
+					alpha: true
+				});
+				renderer.setPixelRatio(window.devicePixelRatio);
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				document.body.appendChild(renderer.domElement);
+
+				// controls
+
+				//controls = new OrbitControls( camera, renderer.domElement );
+				//controls.minDistance = 1;
+				//controls.maxDistance = 200;
+				//controls.enableDamping = true;
+
+				controls = new OrbitControls(camera, renderer.domElement);
+				controls.enableDamping = true;
+				controls.enableZoom = true;
+				controls.update();
+
+				//
+
+				stats = new Stats();
+				document.body.appendChild(stats.dom);
+
+				//
+
+				window.addEventListener("resize", onWindowResize);
+
+				//
+
+				gui = new GUI();
+
+				gui
+					.add(guiSettings, "currentComponentOption", componentList)
+					.name("Component Option")
+					.onChange(function (newComponentValue) {
+						if (firstTime == 0 && !currentAppendValue) {
+							assemblyScene.traverse(function (node) {
+								if (node.material) node.material.dispose();
+								if (node.material && node.material.map)
+									node.material.map.dispose();
+								if (node.geometry) node.geometry.dispose();
+							});
+
+							for (var i = assemblyScene.children.length - 1; i >= 0; i--) {
+								assemblyScene.remove(assemblyScene.children[i]);
+							}
+
+							console.log("unloaded all previous components");
+						}
+
+						if (newComponentValue != currentComponentValue) {
+							loadComponent(newComponentValue);
+							currentComponentValue = newComponentValue;
+						}
+					});
+
+				gui
+					.add(guiSettings, "currentAppendOption")
+					.name("Append Components")
+					.onChange(updateAppendOption);
+
+				gui
+					.add(guiSettings, "currentShadingOption", shadingList)
+					.name("Shading Option")
+					.onChange(updateShadingOption);
+
+				gui
+					.add(guiSettings, "currentEdgeOption", edgeList)
+					.name("Edge Option")
+					.onChange(updateEdgeOption);
+
+				gui
+					.add(guiSettings, "currentPaletteOption", paletteList)
+					.name("Palette Option")
+					.onChange(updatePaletteOption);
+			}
+
+			function loadComponent(thisComponent) {
+				loader.load(
+					"models/vrml/" + thisComponent + ".wrl",
+					function (object) {
+						var box = new THREE.Box3();
+						var center = new THREE.Vector3();
+						var thisGroup = new THREE.Group();
+						thisGroup.name = COMPONENT;
+						thisGroup.add(object);
+						assemblyScene.add(thisGroup);
+						componentScene = thisGroup;
+
+						console.log(object);
+
+						componentScene.traverse(function (node) {
+							if (node.isMesh) {
+								console.log("node isMesh");
+
+								if (node.geometry) {
+									console.log("  node has geometry");
+									console.log(
+										"    isBufferGeometry:",
+										node.geometry.isBufferGeometry
+									);
+									//console.log(node.geometry);
+								}
+								if (node.material) {
+									console.log("  node has material");
+									console.log("    isMaterial:", node.material.isMaterial);
+									if (node.material.isMeshPhongMaterial) {
+										console.log(
+											"    isMeshPhongMaterial:",
+											node.material.isMeshPhongMaterial
+										);
+									} else {
+										console.log("    isMeshPhongMaterial: false");
+									}
+									console.log("    color:", node.material.color);
+									console.log("    flat shading:", node.material.flatShading);
+									console.log("    specular:", node.material.specular);
+									console.log("    shininess:", node.material.shininess);
+									node.material.emissive = new THREE.Color("rgb(0,0,0)");
+									node.material.emissiveIntensity = 0;
+									console.log("    emissive:", node.material.emissive);
+									console.log(
+										"    emissiveIntensity:",
+										node.material.emissiveIntensity
+									);
+									console.log("    opacity:", node.material.opacity);
+									node.material.side = THREE.DoubleSide;
+									console.log("    side:", node.material.side);
+									console.log("    vertex colors:", node.material.vertexColors);
+								}
+							} else if (node.isLight) {
+								console.log("node isLight");
+								if (node.isDirectionalLight) {
+									console.log("  node isDirectionalLight");
+								} else if (node.isHemisphereLight) {
+									console.log("  node isHemisphereLight");
+								} else if (node.isAmbientLight) {
+									console.log("  node isAmbientLight");
+								}
+							} else if (node.isCamera) {
+								console.log("node isCamera");
+								if (node.isOrthographicCamera) {
+									console.log("  node isOrthographicCamera");
+								} else if (node.isPerspectiveCamera) {
+									console.log("  node isPerspectiveCamera");
+								}
+							} else if (node.isGroup) {
+								console.log("node isGroup");
+							} else if (node.isObject3D) {
+								console.log("node isObject3D");
+							} else {
+								console.log("node unidentified");
+								console.log(node);
+							}
+						});
+
+						box.setFromObject(assemblyScene);
+
+						var boxDiagX = box.max.x - box.min.x;
+						var boxDiagY = box.max.y - box.min.y;
+						var boxDiagZ = box.max.z - box.min.z;
+
+						boxDiag = Math.sqrt(
+							boxDiagX * boxDiagX + boxDiagY * boxDiagY + boxDiagZ * boxDiagZ
+						);
+
+						center.x = box.min.x + boxDiagX / 2;
+						center.y = box.min.y + boxDiagY / 2;
+						center.z = box.min.z + boxDiagZ / 2;
+
+						var cameraPosX = center.x;
+						var cameraPosY = center.y;
+						var cameraPosZ = center.z + 2 * boxDiag;
+
+						var lightPosX1 = center.x + 1.0 * boxDiag;
+						var lightPosY1 = center.y + 2.0 * boxDiag;
+						var lightPosZ1 = center.z + 5.0 * boxDiag;
+
+						var lightPosX2 = center.x - 1.0 * boxDiag;
+						var lightPosY2 = center.y - 2.0 * boxDiag;
+						var lightPosZ2 = center.z - 5.0 * boxDiag;
+
+						camera.left = -boxDiag * camera.aspect;
+						camera.right = boxDiag * camera.aspect;
+						camera.top = boxDiag;
+						camera.bottom = -boxDiag;
+						camera.near = boxDiag * 0.25;
+						camera.far = boxDiag * 5;
+
+						camera.position.set(cameraPosX, cameraPosY, cameraPosZ);
+						camera.lookAt(center.x, center.y, center.z);
+
+						dirLight1.position.set(lightPosX1, lightPosY1, lightPosZ1);
+						dirLight1.target.position.copy(camera.lookAt);
+
+						dirLight2.position.set(lightPosX2, lightPosY2, lightPosZ2);
+						dirLight2.target.position.copy(camera.lookAt);
+
+						controls.target.set(center.x, center.y, center.z);
+
+						camera.updateProjectionMatrix();
+
+						//controls.reset();
+					},
+					function (xhr) {
+						console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
+					},
+					function (error) {
+						console.log("An error happened");
+					}
+				);
+			}
+
+			function updateAppendOption() {
+				newAppendValue = guiSettings.currentAppendOption;
+				currentAppendValue = newAppendValue;
+			}
+
+			function updateEdgeOption() {
+				newEdgeValue = guiSettings.currentEdgeOption;
+				currentEdgeValue = newEdgeValue;
+			}
+
+			function updatePaletteOption() {
+				var thisGroup;
+
+				newPaletteValue = guiSettings.currentPaletteOption;
+
+				console.log(
+					"number of children in assembly = ",
+					assemblyScene.children.length
+				);
+
+				for (var i = 0; i < assemblyScene.children.length; i++) {
+					if (assemblyScene.children[i].isGroup) console.log(" child isGroup");
+					console.log(" child name = ", assemblyScene.children[i].name);
+
+					thisGroup = assemblyScene.children[i];
+					thisGroup.traverse(function (node) {
+						if (node.isMesh) {
+							if (node.material) {
+								console.log(" found material");
+								console.log(
+									" new material color :",
+									palette1[3 * i],
+									palette1[3 * i + 1],
+									palette1[3 * i + 2]
+								);
+
+								//node.material.color.set(palette1[3*i]/255, palette1[3*i+1]/255, palette1[3*i+2]/255);
+
+								node.material.color.r = palette1[3 * i] / 255.0;
+								node.material.color.g = palette1[3 * i + 1] / 255.0;
+								node.material.color.b = palette1[3 * i + 2] / 255.0;
+
+								console.log(" assigned material color :", node.material.color);
+							}
+						}
+					});
+				}
+
+				currentPaletteValue = newPaletteValue;
+			}
+
+			function updateShadingOption() {
+				newShadingValue = guiSettings.currentShadingOption;
+				if (newShadingValue != currentShadingValue) {
+					assemblyScene.traverse(function (node) {
+						if (node.isMesh) {
+							if (node.material) {
+								if (newShadingValue == "phong") {
+									var oldMaterial = node.material;
+									var newMaterial = new THREE.MeshPhongMaterial();
+
+									newMaterial.color = oldMaterial.color;
+									newMaterial.emissive = oldMaterial.emissive;
+									newMaterial.opacity = oldMaterial.opacity;
+									newMaterial.side = oldMaterial.side;
+									newMaterial.colorWrite = true;
+									newMaterial.wireframe = false;
+									node.material.dispose();
+									node.material = newMaterial;
+								} else if (newShadingValue == "flat") {
+									var oldMaterial = node.material;
+									var newMaterial = new THREE.MeshBasicMaterial();
+
+									newMaterial.color = oldMaterial.color;
+									newMaterial.opacity = oldMaterial.opacity;
+									newMaterial.side = oldMaterial.side;
+									newMaterial.colorWrite = true;
+									newMaterial.wireframe = false;
+									node.material.dispose();
+									node.material = newMaterial;
+								} else if (newShadingValue == "wireframe") {
+									node.material.wireframe = true;
+									node.material.colorWrite = true;
+								} else if (newShadingValue == "none") {
+									node.material.colorWrite = false;
+								}
+							}
+						}
+					});
+
+					currentShadingValue = newShadingValue;
+				}
+			}
+
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.left = -boxDiag * camera.aspect;
+				camera.right = boxDiag * camera.aspect;
+				camera.top = boxDiag;
+				camera.bottom = -boxDiag;
+				camera.near = boxDiag * 0.25;
+				camera.far = boxDiag * 5;
+
+				camera.updateProjectionMatrix();
+
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+			
+
+			// hex string function: to convert a given rgba to hex
+			function hexString(r, g, b, a){
+				return r.toString(16) + "--" + g.toString(16) + "--" + b.toString(16) + "--" + a.toString(16)
+			}
+
+
+			// function to print all colors in the set s
+			function printColour(s){
+				s = s.split("--");
+				for (var i = 0; i < s.length; i++){
+					s[i] = parseInt(s[i], 16);
+				}
+				console.log(s);
+			}
+
+			// function to reshape an 1D array to x * y
+			Uint8Array.prototype.reshape = function(rows, cols) {
+				let copy = this.slice(0); // Copy all elements.
+				this.length = 0; // Clear out existing array.
+
+				for (let r = 0; r < rows; r++) {
+					let row = [];
+					for (let c = 0; c < cols; c++) {
+					var i = r * cols + c;
+					if (i < copy.length) {
+						row.push(copy[i]);
+					}
+					}
+					this.push(row);
+				}
+			};
+
+			// Creating a graph datastructure for storing the adjacency matrix
+			class Graph {
+				constructor(noOfVertices) {
+					this.noOfVertices = noOfVertices;
+					this.adjList = new Map();
+				}
+
+				addVertex(v) {
+					this.adjList.set(v, new Set());
+				}
+
+				addEdge(v, w) {
+					this.adjList.get(v).add(w);
+					this.adjList.get(w).add(v);
+				}
+
+				printGraph() {
+					let getKeys = this.adjList.keys();
+					for(let i of getKeys) {
+						let getValues = this.adjList.get(i);
+						getValues = Array.from(getValues);
+						let conc = "";
+						for(let j of getValues) {
+							conc += j + " ";
+						}
+						console.log(i + " -> " + conc);
+					}
+				}
+			}
+
+			
+			// reshaping the frame buffer from 1D array to a 2D array
+			// with given rows and cols
+			// returns the 2D framebuffer
+			const reshape = (arr, rows, cols) => {
+				let copy = arr.slice(0);
+				let newArr = [];
+				
+				for (let r = 0; r < rows; r++) {
+					let row = [];
+					for (let c = 0; c < cols; c++) {
+					var i = r * cols + c;
+					if (i < copy.length) {
+						row.push(copy[i]);
+					}
+					}
+					newArr.push(row);
+				}
+
+				return newArr;
+			}
+
+			
+			// creating a button object with a function getvc that outputs the number of colors
+			// in the viewpoint.
+			// we are using the readpixels function of webgl to get all the colors in the frame
+			// and storing them in the pixels array.
+			// we then get and print the unique colors in a set.
+			var obj = { getvc : function(){
+				const gl = renderer.getContext("webgl");
+				const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+				gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+				// console.log(pixels);
+				let set = new Set();
+				let newpix = [];
+				for(let i = 0; i < pixels.length; i += 4) {
+					set.add(hexString(pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]));
+					newpix.push(hexString(pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]));
+				}
+
+
+				console.log(set);
+				// console.log(newpix);
+				console.log(window.innerHeight * window.devicePixelRatio, window.innerWidth * window.devicePixelRatio);
+				console.log(Math.floor(window.innerHeight * window.devicePixelRatio), Math.floor(window.innerWidth * window.devicePixelRatio));
+				console.log(Math.floor(window.innerHeight * window.devicePixelRatio) * Math.floor(window.innerWidth * window.devicePixelRatio) * 4);
+				// console.log(window.screen.width, window.screen.height);
+				console.log(reshape(newpix, Math.floor(window.innerHeight * window.devicePixelRatio), Math.floor(window.innerWidth * window.devicePixelRatio)));	
+				let pix = reshape(newpix, Math.floor(window.innerHeight * window.devicePixelRatio), Math.floor(window.innerWidth * window.devicePixelRatio));
+
+				set = Array.from(set);
+				const adjMatrix = new Graph(set.size);
+				for(let i = 0;i < set.length; i++) {
+					if(set[i] != bgColorHex) {
+						adjMatrix.addVertex(set[i]);
+					}
+				}
+
+				// get rows and cols based on height and width multiplied by device pixel ratio
+				let rows = Math.floor(window.innerHeight * window.devicePixelRatio);
+				let cols = Math.floor(window.innerWidth * window.devicePixelRatio);
+
+
+				// traverse the frame buffer and get the adjacency graph based on 
+				// colors adjacent to other. Compares each pixel to all its adjacent points
+				// i.e, left, right, top, bottom, top left, top right, bottom left, bottom right
+				for(let i = 0; i < rows; i += 1) {
+					for(let j = 0; j < cols; j += 1) {
+						const v1 = pix[i][j];
+						try {
+							const v2 = pix[i][j + 1];
+							if(v1 !== v2) {
+								if(v1 !== bgColorHex && v2 !== bgColorHex) {
+									adjMatrix.addEdge(v1, v2);
+								}
+							}
+						}
+						catch(error) {
+							// pass 
+						}
+
+
+						try {
+							const v3 = pix[i + 1][j];
+							if(v1 !== v3 && v1 !== bgColorHex && v3 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v3);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v4 = pix[i + 1][j + 1];
+							if(v1 !== v4 && v1 !== bgColorHex && v4 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v4);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v5 = pix[i - 1][j];
+							if(v1 !== v5 && v1 !== bgColorHex && v5 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v5);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v6 = pix[i - 1][j + 1];
+							if(v1 !== v6 && v1 !== bgColorHex && v6 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v6);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v7 = pix[i - 1][j - 1];
+							if(v1 !== v7 && v1 !== bgColorHex && v7 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v7);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v8 = pix[i + 1][j - 1];
+							if(v1 !== v8 && v1 !== bgColorHex && v8 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v8);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+
+						try {
+							const v9 = pix[i][j - 1];
+							if(v1 !== v9 && v1 !== bgColorHex && v9 !== bgColorHex) {
+								adjMatrix.addEdge(v1, v9);
+							}
+						}
+						catch(error) {
+							// pass ;
+						}
+					}
+				}
+				
+				adjMatrix.printGraph();
+				
+			}};	
+
+			
+			// adding the button to the gui
+			gui.add(obj,'getvc');
+
+			function animate() {
+				requestAnimationFrame(animate);
+
+				controls.update(); // to support damping
+
+				renderer.render(grandScene, camera);
+
+				stats.update();
+			}
+		</script>
+	</body>
+</html>
